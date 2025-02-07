@@ -3,27 +3,70 @@ import itertools
 import pandas as pd
 
 
-def generate_cutting_patterns(raw_materials, products):
+
+def generate_cutting_patterns_without_redundancy(raw_materials, products):
     """
-    pattern_matrices[r]:第r种原料的裁剪方式矩阵
-    pattern_matrices[r].at[i, p]:第r种原料中第i种裁剪方式中第p种成品的重复次数
+    生成无边丝（无冗余宽度）的裁剪方案
+
+    arguments：
+    - raw_materials: DataFrame，包含 "width"（原材料宽度）
+    - products: DataFrame，包含 "width"（成品宽度）
+
+    return：
+    - pattern_matrices: 一个列表，每个元素是一个 DataFrame（表示该原材料的所有裁剪方案）
     """
-    # 假设每个pattern都只有一种成品，它的个数不会超过(原料宽度//成品宽度)
     max_counts = (raw_materials.width.values.reshape(-1, 1) //
                   products.width.values.reshape(1, -1))
-
-    pattern_matrices = []
-    for i in range(len(raw_materials)):
-        # 生成所有可能的组合
-        temp = itertools.product(*[range(count + 1) for count in max_counts[i]])
-        temp_df = pd.DataFrame(temp)
+    pattern_matrices = {}
+    for r in range(len(raw_materials.width)):
+        # 生成所有组合
+        temp = itertools.product(*[range(count + 1) for count in max_counts[r]])
+        temp_df = pd.DataFrame(temp, columns=products.width)
 
         # 计算每种组合的总宽度
-        whole_width = temp_df.dot(products.width.values)
+        whole_width = temp_df.values.dot(products.width.values.reshape(-1, 1))
 
-        # 筛选有效的裁剪方案
-        pattern_matrices.append(temp_df[whole_width <= raw_materials.loc[i, "width"]])
+        # 筛选无边丝的方案
+        filtered_df = temp_df[whole_width.flatten() == raw_materials.loc[r, "width"]]
+
+        if len(filtered_df) > 0:
+            pattern_matrices[raw_materials.loc[r, 'width']] = filtered_df.reset_index(drop=True)
+
     return pattern_matrices
+
+
+def generate_cutting_patterns_with_redundancy(raw_materials, products):
+    """
+    处理价格区间边缘位置的原料的方案，此时允许有边丝，但是边丝不得超过成品宽度的最小值
+    （否则显然有更佳的方案）。
+    arguments:
+    - raw_materials: DataFrame，包含 "width"（原材料宽度）
+    - products: DataFrame，包含 "width"（成品宽度）
+    - width_cost: DataFrame, 包含"width"(区间最小宽度,区间包含此宽度), "cost":成本。
+
+    return:
+    - pattern_matrices: 一个dict，每个元素是一个 DataFrame（表示该原材料的所有裁剪方案）
+    """
+    max_counts = (raw_materials.width.values.reshape(-1, 1) //
+                  products.width.values.reshape(1, -1))
+    pattern_matrices = {}
+    for r in range(len(raw_materials.width)):
+        # 生成所有组合
+        temp = itertools.product(*[range(count + 1) for count in max_counts[r]])
+        temp_df = pd.DataFrame(temp, columns=products.width)
+
+        # 计算每种组合的总宽度
+        whole_width = temp_df.values.dot(products.width.values.reshape(-1, 1))
+
+        # 筛选边丝宽度不超过最小成品宽度的
+        filtered_df = temp_df[(whole_width.flatten() <= raw_materials.loc[r, "width"]) &
+                              (whole_width.flatten() >= (raw_materials.loc[r, "width"] - products.width.min()))]
+
+        if len(filtered_df) > 0:
+            pattern_matrices[raw_materials.loc[r, 'width']] = filtered_df.reset_index(drop=True)
+    return pattern_matrices
+
+
 
 
 def solve():
