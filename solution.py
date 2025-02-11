@@ -1,6 +1,7 @@
 from ortools.linear_solver import pywraplp
 import itertools
 import pandas as pd
+from pandas.util.version import Infinity
 from streamlit import columns
 
 
@@ -105,7 +106,7 @@ class CuttingPatterns:
         :param raw_materials: DataFrame, 有一列为可选原料的宽度
         :param cost_df: DataFrame, 两列:start_width, cost，
         从一个start_width（包含）到另一个start_width（不包含）为止的原料的成本为cost
-        :return: None
+        :return: 实例的raw_matrices
         """
         # 排序数据
         cost_df.sort_values(by="start_width", axis=0, inplace=True, ignore_index=True)
@@ -126,57 +127,78 @@ class CuttingPatterns:
         for raw_width, df in matrices2.items():
             self._add_patterns(raw_width, df)
 
+        return self.raw_matrices
+
 
 class Solution:
     def __init__(self):
-        pass
+        self.result = None
+
 
     @staticmethod
     def get_raw_materials():
         raw_materials = pd.DataFrame(columns=["width"])
         raw_materials.width = [1280, 1260, 1000, 950, 1250, 1200]
-        return raw_materials
+        return raw_materials.sort_values(by="width", ignore_index=True)
 
     @staticmethod
     def get_products():
         products = pd.DataFrame({
-            "length": [9775, 7444, 7444, 9775],  # 单个长度
-            "width": [166, 285, 160, 112],  # 单个宽度
-            "count": [400, 350, 350, 400]  # 件数
+            "total_length": [400*9775, 350*7444, 350*7444, 400*9775],  # 总长度
+            "width":        [166, 285, 160, 112],  # 宽度
         })
-        return products
+        return products.sort_values(by="width", ignore_index=True)
 
     @staticmethod
-    def solve(self):
+    def get_cost_df():
+        cost_df = pd.DataFrame({"start_width":[1200, 1000, 1250],
+                                "cost":       [4050, 4000, 4100]})
+        return cost_df
+
+    @staticmethod
+    def solve(self, min_l=0):
         # 原材料
         raw_materials = Solution.get_raw_materials()
 
         # 成品
         products = Solution.get_products()
 
+        # 价格表
+        cost_df = Solution.get_cost_df()
+
         # 生成所有的裁剪方案
-        generator = CuttingPatterns()
-        pattern_matrices = generate_cutting_patterns(raw_materials, products)
+        cost_df = Solution.get_cost_df()
+        generator = CuttingPatterns(raw_materials=raw_materials, products=products)
+        raw_matrices = generator.generate(cost_df=cost_df) # {width:DataFrame(Patterns)}
 
         # 创建SCIP求解器实例
         solver = pywraplp.Solver.CreateSolver("SCIP")
+        if not solver:
+            return "Solver 初始化失败。"
 
-        # 定义变量, l[(i, j)]为第i种原料的第j种pattern使用的长度
+        # 定义变量, l[(w, p)]为宽度为w的原料的第p种pattern使用的长度
         l = {}
-        for i, pattern_m in enumerate(pattern_matrices):
-            for j in range(len(pattern_m)):
-                l[(i, j)] = solver.NumVar(0, solver.Infinity(), f"l[{i}, {j}]")
+        y = {}
+        for raw_width, patterns in raw_matrices.items():
+            for p in range(len(patterns)):
+                l[(raw_width, p)] = solver.NumVar(min_l,
+                                                  solver.Infinity(),
+                                                  f"l[{raw_width}, {p}]")
+                y[(raw_width, p)] = solver.BoolVar(f"y[{raw_width}, {p}]")
+
+
+
 
         # 定义目标函数
         objective = solver.Objective()  # 目标为使用原材料的总面积最小
-        for (i, j), var in l.items():
-            objective.SetCoefficient(var, float(raw_materials.loc[i, "width"]))
+        for (w, p), var in l.items():
+            objective.SetCoefficient(var, float(w))
         objective.SetMinimization()
 
-        # 添加约束条件
+        # 约束条件1: 每种成品的总长度均被满足
         for p, width in enumerate(products.width):
-            # 对第p个成品，添加约束，使得该成品的总长度不小于要求的count*length.
-            lower_bound = float(products.loc[p, "count"]) * float(products.loc[p, "length"])
+            # 对每种成品，添加约束，使得该成品的总长度不低于要求。
+            lower_bound = float(products.loc[p, "count"])
             constraint = solver.Constraint(lower_bound, solver.infinity())
             for (i, j), var in l.items():
                 coeff = float(pattern_matrices[i].iloc[j, p])
