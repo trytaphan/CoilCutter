@@ -1,8 +1,8 @@
 from ortools.linear_solver import pywraplp
 import itertools
 import pandas as pd
-from pandas.util.version import Infinity
-from streamlit import columns
+import numpy as np
+import bisect
 
 
 class CuttingPatterns:
@@ -89,16 +89,14 @@ class CuttingPatterns:
 
     def _select_edge_raw_materials(self, cost_df):
         """选择价格区间边缘的原材料"""
-        edge_raw_materials = pd.DataFrame(columns=["width"])
-        index = 0
-        for start_width in cost_df.start_width:
-            while index < len(self.raw_materials.width):
-                if self.raw_materials.width[index] >= start_width:
-                    edge_raw_materials.loc[len(edge_raw_materials)] = [start_width]
-                    index += 1
-                    break
-                index += 1
-        return edge_raw_materials
+        edge_width = set()
+        raw_width = self.raw_materials.width.values.astype(float).tolist()
+        for start_width in cost_df.start_width.values.astype(float):
+            i = bisect.bisect_left(raw_width, start_width)
+            if i < len(raw_width):
+                edge_width.add(raw_width[i])
+        result = pd.DataFrame({"width": list(edge_width)}).sort_values(by="width", ignore_index=True)
+        return result
 
     def generate(self, cost_df):
         """
@@ -129,47 +127,76 @@ class CuttingPatterns:
 
         return self.raw_matrices
 
+    @staticmethod
+    def trim_width(raw_width, pattern, products):
+        pattern_np = np.array(pattern)
+        products_width_np = products.width.values
+        return raw_width - pattern_np.dot(products_width_np)
+
+
 
 class Solution:
     def __init__(self):
         self.result = None
+        self.cost_df = pd.DataFrame()
+        self.raw_materials = pd.DataFrame()
+        self.products = pd.DataFrame()
 
-
-    @staticmethod
-    def get_raw_materials():
+    def get_raw_materials(self):
         raw_materials = pd.DataFrame(columns=["width"])
         raw_materials.width = [1280, 1260, 1000, 950, 1250, 1200]
-        return raw_materials.sort_values(by="width", ignore_index=True)
+        self.raw_materials = raw_materials.sort_values(by="width", ignore_index=True)
+        return self.raw_materials
 
-    @staticmethod
-    def get_products():
+    def get_products(self):
         products = pd.DataFrame({
-            "total_length": [400*9775, 350*7444, 350*7444, 400*9775],  # 总长度
-            "width":        [166, 285, 160, 112],  # 宽度
+            "total_length": [400 * 9775, 350 * 7444, 350 * 7444, 400 * 9775],  # 总长度
+            "width": [166, 285, 160, 112],  # 宽度
         })
-        return products.sort_values(by="width", ignore_index=True)
+        self.products = products.sort_values(by="width", ignore_index=True)
+        return self.products
 
-    @staticmethod
-    def get_cost_df():
-        cost_df = pd.DataFrame({"start_width":[1200, 1000, 1250],
-                                "cost":       [4050, 4000, 4100]})
-        return cost_df
+    def set_cost(self, cost_df=None):
 
-    @staticmethod
+        # 如果 cost_df 为空，使用默认值:实例属性cost_df
+        cost_df = self.cost_df if cost_df is None else cost_df
+
+        # 排序cost_df
+        cost_df.sort_values(by="start_width", ignore_index=True, inplace=True)
+
+        # 检验cost_df合理性
+        if cost_df.start_width[0] > self.raw_materials.width[0]:
+            raise ValueError("价格表不能覆盖所有原料宽度，请检查。")
+
+        # 查找每个原材料属于哪个价格区间
+        idx = np.searchsorted(cost_df.start_width.values,
+                              self.raw_materials.width.values,
+                              side="right")  # 价格区间为左开右闭
+
+        # 将每一种原料的价格存储在raw_materials DataFrame里面
+        self.raw_materials["cost"] = [cost_df.loc[i - 1, "cost"] for i in idx]
+        return self.raw_materials
+
+    def get_cost_df(self):
+        cost_df = pd.DataFrame({"start_width": [1200, 1000, 1250],
+                                "cost": [4050, 4000, 4100]})
+        self.cost_df = cost_df.sort_values(by="start_width", ignore_index=True)
+        self.set_cost()
+        return self.cost_df
+
     def solve(self, min_l=0):
         # 原材料
-        raw_materials = Solution.get_raw_materials()
+        self.get_raw_materials()
 
         # 成品
-        products = Solution.get_products()
+        self.get_products()
 
         # 价格表
-        cost_df = Solution.get_cost_df()
+        self.get_cost_df()
 
         # 生成所有的裁剪方案
-        cost_df = Solution.get_cost_df()
-        generator = CuttingPatterns(raw_materials=raw_materials, products=products)
-        raw_matrices = generator.generate(cost_df=cost_df) # {width:DataFrame(Patterns)}
+        generator = CuttingPatterns(raw_materials=self.raw_materials, products=self.products)
+        raw_matrices = generator.generate(cost_df=self.cost_df)  # {width:DataFrame(Patterns)}
 
         # 创建SCIP求解器实例
         solver = pywraplp.Solver.CreateSolver("SCIP")
@@ -186,13 +213,18 @@ class Solution:
                                                   f"l[{raw_width}, {p}]")
                 y[(raw_width, p)] = solver.BoolVar(f"y[{raw_width}, {p}]")
 
-
-
-
         # 定义目标函数
-        objective = solver.Objective()  # 目标为使用原材料的总面积最小
+        objective = solver.Objective()  # 目标为使用原材料的价值最小
         for (w, p), var in l.items():
-            objective.SetCoefficient(var, float(w))
+
+            # 此宽度原料的价格
+            cost = self.raw_materials[self.raw_materials.width==w].iloc[0]["cost"]
+            trim_width = CuttingPatterns.trim_width(raw_width=w,
+                                                    pattern=raw_matrices[w].loc[p],
+                                                    products=self.products)
+            width_cost = float(w * cost - trim_width * cost / 2) # 边丝按一半的价格销售
+
+            objective.SetCoefficient(var, width_cost)
         objective.SetMinimization()
 
         # 约束条件1: 每种成品的总长度均被满足
