@@ -1,6 +1,8 @@
 import pandas as pd
 
 
+
+
 class SupportBracket:
     property_list = ["shape", "height", "dimension_B", "dimension_C", "thickness",
                      "length", "specification", "height_r", "dimension_B_r",
@@ -21,7 +23,7 @@ class SupportBracket:
         "specification_r": "实际规格"
     }
 
-    def __init__(self, specification: str) -> None:
+    def __init__(self, specification: str, count) -> None:
         """
         specification: 规格，如C100*35*10*2.5*9775
         """
@@ -65,6 +67,10 @@ class SupportBracket:
     @staticmethod
     def display_in_CN(df):
         return df.rename(columns = SupportBracket.chinese_mapping)
+
+    @staticmethod
+    def prepare_products(brackets):
+        for bracket
 
 
 if __name__ == '__main__':

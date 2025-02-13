@@ -52,6 +52,47 @@ class CuttingPatterns:
             self._add_patterns(raw_width, df)
         return self
 
+    @staticmethod
+    def _generate_combination(tolerance, raw_width, products, current_comb, idx):
+        # 剩余宽度小于0，不符合条件，直接返回
+        if raw_width < 0:
+            return
+
+        # 剩余宽度不超过限度，yield结果
+        if raw_width <= tolerance:
+            yield current_comb
+
+        # 遍历products里的每种宽度
+        for i, width in enumerate(products[idx:]):
+            max_count = raw_width // width
+            # 遍历每一个可能的出现次数
+            for count in range(max_count + 1):
+                current_comb[i] = count
+                raw_width -= count * width
+                yield from CuttingPatterns._generate_patterns(tolerance, raw_width,
+                                                              products, current_comb, i+1)
+    # @staticmethod
+    # def _generate_combination(tolerance, raw_width, products, current_comb, idx):
+    #     # 剩余宽度小于0，不符合条件，直接返回
+    #     if raw_width < 0:
+    #         return
+    #
+    #     # 剩余宽度不超过限度，yield结果
+    #     if raw_width <= tolerance:
+    #         yield current_comb
+    #
+    #     # 遍历products里的每种宽度
+    #     for i, width in enumerate(products[idx:]):
+    #         max_count = raw_width // width
+    #         # 遍历每一个可能的出现次数
+    #         for count in range(max_count + 1):
+    #             current_comb[i] += count
+    #             raw_width -= count * width
+    #             yield from CuttingPatterns._generate_patterns(tolerance, raw_width,
+    #                                                           products, current_comb, i+1)
+    #             current_comb[i] -= count
+
+
     def _generate_patterns(self, tolerance: int, raw_materials=None, products=None):
         """
 
@@ -72,7 +113,7 @@ class CuttingPatterns:
         pattern_matrices = {}
         for r in range(len(raw_materials.width)):
             # 生成所有组合
-            temp = itertools.product(*[range(count + 1) for count in max_counts[r]])
+            temp = itertools.product(*[range(int(count) + 1) for count in max_counts[r]])
             temp_df = pd.DataFrame(temp, columns=products.width.values)
 
             # 计算每种组合的总宽度
@@ -134,7 +175,6 @@ class CuttingPatterns:
         return raw_width - pattern_np.dot(products_width_np)
 
 
-
 class Solution:
     def __init__(self):
         self.result = None
@@ -144,14 +184,19 @@ class Solution:
 
     def get_raw_materials(self):
         raw_materials = pd.DataFrame(columns=["width"])
-        raw_materials.width = [1280, 1260, 1000, 950, 1250, 1200]
+        raw_materials = pd.DataFrame(data=range(1000, 1301), columns=['width'])
+        # raw_materials = pd.DataFrame(data=[1250], columns = ['width'])
         self.raw_materials = raw_materials.sort_values(by="width", ignore_index=True)
         return self.raw_materials
 
     def get_products(self):
+        # products = pd.DataFrame({
+        #     "total_length": [6400 * 9775, 6400 * 7444, 6400 * 7444, 6400 * 9775],  # 总长度
+        #     "width": [166, 166, 166, 200],  # 宽度
+        # })
         products = pd.DataFrame({
-            "total_length": [400 * 9775, 350 * 7444, 350 * 7444, 400 * 9775],  # 总长度
-            "width": [166, 285, 160, 112],  # 宽度
+            "total_length": [6400 * 9775],  # 总长度
+            "width": [166],  # 宽度
         })
         self.products = products.sort_values(by="width", ignore_index=True)
         return self.products
@@ -178,13 +223,13 @@ class Solution:
         return self.raw_materials
 
     def get_cost_df(self):
-        cost_df = pd.DataFrame({"start_width": [1200, 1000, 1250],
-                                "cost": [4050, 4000, 4100]})
+        cost_df = pd.DataFrame({"start_width": [1000, 1200],
+                                "cost": [4240, 4190]})
         self.cost_df = cost_df.sort_values(by="start_width", ignore_index=True)
         self.set_cost()
         return self.cost_df
 
-    def solve(self, min_l=0):
+    def solve(self, max_patterns, min_l=0):
         # 原材料
         self.get_raw_materials()
 
@@ -197,7 +242,7 @@ class Solution:
         # 生成所有的裁剪方案
         generator = CuttingPatterns(raw_materials=self.raw_materials, products=self.products)
         raw_matrices = generator.generate(cost_df=self.cost_df)  # {width:DataFrame(Patterns)}
-
+        trim_width = {}  # {(raw_width, pattern_index) : trim_width}
         # 创建SCIP求解器实例
         solver = pywraplp.Solver.CreateSolver("SCIP")
         if not solver:
@@ -216,25 +261,33 @@ class Solution:
         # 定义目标函数
         objective = solver.Objective()  # 目标为使用原材料的价值最小
         for (w, p), var in l.items():
-
-            # 此宽度原料的价格
-            cost = self.raw_materials[self.raw_materials.width==w].iloc[0]["cost"]
-            trim_width = CuttingPatterns.trim_width(raw_width=w,
-                                                    pattern=raw_matrices[w].loc[p],
-                                                    products=self.products)
-            width_cost = float(w * cost - trim_width * cost / 2) # 边丝按一半的价格销售
+            cost = self.raw_materials[self.raw_materials.width == w].iloc[0]["cost"]  # 此宽度原料的价格
+            trim_width[(w, p)] = CuttingPatterns.trim_width(raw_width=w,
+                                                            pattern=raw_matrices[w].loc[p],
+                                                            products=self.products)
+            width_cost = float(w * cost - trim_width[(w, p)] * cost / 2)  # 边丝折损一半货值
 
             objective.SetCoefficient(var, width_cost)
         objective.SetMinimization()
 
         # 约束条件1: 每种成品的总长度均被满足
-        for p, width in enumerate(products.width):
+        for p, width in enumerate(self.products.width):
             # 对每种成品，添加约束，使得该成品的总长度不低于要求。
-            lower_bound = float(products.loc[p, "count"])
+            lower_bound = float(self.products.loc[p, "total_length"])
             constraint = solver.Constraint(lower_bound, solver.infinity())
-            for (i, j), var in l.items():
-                coeff = float(pattern_matrices[i].iloc[j, p])
+            for (w, j), var in l.items():
+                coeff = float(raw_matrices[w].iloc[j, p])
                 constraint.SetCoefficient(var, coeff)
+
+        # 约束条件2：使用的pattern数不超过限制
+        constraint = solver.Constraint(0, max_patterns)
+        for (w, j), var in y.items():
+            constraint.SetCoefficient(var, 1)
+
+        # 约束条件3: 限制长度为0时，使用标记y必须为0
+        M = 1e11
+        for (w, j), var in l.items():
+            solver.Add(var <= y[(w, j)] * M)
 
         # 求解
         status = solver.Solve()
@@ -242,11 +295,22 @@ class Solution:
         # 输出结果
         if status == pywraplp.Solver.OPTIMAL:
             print("已找到最优解！")
-            col = [products.loc[idx, "width"] for idx in range(len(products))] + ["len_used"]
-            result = pd.DataFrame(columns=col)
-            for (i, j), var in l.items():
-                if var.solution_value() > 0:
-                    pattern_content = pattern_matrices[i].iloc[j]  # 当前pattern的内容
-                    result.loc[len(result)] = list(pattern_content) + [var.solution_value()]
 
-        return result
+            # 初始化结果DataFrame
+            col = ["raw_width"] + self.products.width.tolist() + ["len_used", "trim_width"]
+            result = pd.DataFrame(columns=col)
+
+            for (w, j), var in y.items():
+                if var.solution_value() > 0:
+                    pattern = raw_matrices[w].iloc[j]
+                    new_row = {"raw_width": w,
+                               "len_used": l[(w, j)].solution_value(),
+                               "trim_width": trim_width[(w, j)]}
+                    for width in self.products.width:
+                        new_row[width] = pattern[width]
+
+                    result = pd.concat([result, pd.DataFrame([new_row])], ignore_index=True)
+            return result
+        else:
+            print("未找到最优解")
+            return None
