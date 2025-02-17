@@ -6,7 +6,8 @@ import openpyxl
 class SupportBracket:
     property_list = ["shape", "height", "dimension_B", "dimension_C", "thickness",
                      "length", "specification", "height_t", "dimension_B_t",
-                     "dimension_C_t", "thickness_t", "specification_t", "count", "name", "grade"]
+                     "dimension_C_t", "thickness_t", "specification_t", "unfolded_width",
+                     "count", "name", "grade"]
 
     English_Chinese_mapping = {
         "shape": "形状",
@@ -23,7 +24,8 @@ class SupportBracket:
         "specification_t": "目标规格",
         "count": "总数量",
         "grade": "材质",
-        "name": "名称"
+        "name": "名称",
+        "unfolded_width": "展开宽度"
     }
     Chinese_English_mapping = \
         {chinese: english for english, chinese in English_Chinese_mapping.items()}
@@ -95,10 +97,16 @@ class SupportBracket:
         self.dimension_B_t = float(spec_dict[1])
         self.dimension_C_t = float(spec_dict[2])
         self.thickness_t = float(spec_dict[3])
+        self.length = float(spec_dict[4])
         self.specification_t = spec_t
 
     def to_dict(self):
-        return {str(prop): getattr(self, prop) for prop in self.property_list}
+        return {str(prop): getattr(self, prop, None) for prop in self.property_list}
+
+    @property
+    def unfolded_width(self):
+        return self.height_t + self.dimension_B_t * 2 +self.dimension_C_t * 2 - self.thickness_t * 9
+
 
 
     @staticmethod
@@ -113,9 +121,6 @@ class SupportBracket:
             print(f"请检查规格{spec}: {e}")
             st.warning(f"请检查规格{spec}: {e}")
 
-    @staticmethod
-    def prepare_products(brackets):
-        pass
 
     @staticmethod
     def from_dataframe(df, idx, re_parse=False):
@@ -125,7 +130,6 @@ class SupportBracket:
             setattr(inst, prop, df.loc[idx, prop])
         if re_parse:
             inst.parse_specification()
-            inst.init_target_dimensions()
         return inst
 
 
@@ -150,6 +154,14 @@ class Brackets:
         data = [bracket.to_dict() for bracket in self.list]
         return pd.DataFrame(data)
 
+    def update_target_dimensions(self):
+        for bracket in self.list:
+            bracket.update_target_dimensions()
+
+    def init_target_dimensions(self):
+        for bracket in self.list:
+            bracket.init_target_dimensions()
+
     @staticmethod
     def from_dataframe(df, re_parse=False):
         """从DataFrame加载"""
@@ -173,6 +185,11 @@ class Brackets:
         df = display_in_English(df)
         return Brackets.from_dataframe(df, re_parse)
 
+    def prepare4solution(self):
+        df = self.to_dataframe()[["unfolded_width"]].copy()
+        df.rename(columns={"unfolded_width": "width"}, inplace=True)
+        return df
+
 
 
 def display_in_Chinese(df):
@@ -183,10 +200,3 @@ def display_in_English(df):
     return df.rename(columns=SupportBracket.Chinese_English_mapping)
 
 
-if __name__ == '__main__':
-    from pathlib import Path
-
-    path = Path(r"D:\project\coilCutter\assets\input_template.xlsx")
-    bs = Brackets()
-    bs.from_excel(path)
-    bs.to_dataframe()
