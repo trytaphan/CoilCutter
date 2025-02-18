@@ -176,30 +176,25 @@ class CuttingPatterns:
 
 
 class Solution:
-    def __init__(self):
+    def __init__(self, raw_materials=None, products=None):
+        """
+        :param raw_materials: DataFrame,包含width
+        :param products: DataFrame,包含width和total_length两列
+        """
         self.result = None
-        self.cost_df = pd.DataFrame()
-        self.raw_materials = pd.DataFrame()
-        self.products = pd.DataFrame()
+        self.products = products
+        if raw_materials is not None:
+            self.raw_materials = raw_materials
+        else:
+            self.get_raw_materials()
+
+        self.cost_df = self.get_cost_df()
 
     def get_raw_materials(self):
-        raw_materials = pd.DataFrame(columns=["width"])
+        """提供默认的原材料设置"""
         raw_materials = pd.DataFrame(data=range(1000, 1301), columns=['width'])
-        # raw_materials = pd.DataFrame(data=[1250], columns = ['width'])
         self.raw_materials = raw_materials.sort_values(by="width", ignore_index=True)
         return self.raw_materials
-
-    def get_products(self):
-        # products = pd.DataFrame({
-        #     "total_length": [6400 * 9775, 6400 * 7444, 6400 * 7444, 6400 * 9775],  # 总长度
-        #     "width": [166, 166, 166, 200],  # 宽度
-        # })
-        products = pd.DataFrame({
-            "total_length": [6400 * 9775],  # 总长度
-            "width": [166],  # 宽度
-        })
-        self.products = products.sort_values(by="width", ignore_index=True)
-        return self.products
 
     def set_cost(self, cost_df=None):
 
@@ -229,15 +224,8 @@ class Solution:
         self.set_cost()
         return self.cost_df
 
-    def solve(self, max_patterns, min_l=0):
-        # 原材料
-        self.get_raw_materials()
+    def solve(self, max_patterns):
 
-        # 成品
-        self.get_products()
-
-        # 价格表
-        self.get_cost_df()
 
         # 生成所有的裁剪方案
         generator = CuttingPatterns(raw_materials=self.raw_materials, products=self.products)
@@ -253,8 +241,7 @@ class Solution:
         y = {}
         for raw_width, patterns in raw_matrices.items():
             for p in range(len(patterns)):
-                l[(raw_width, p)] = solver.NumVar(min_l,
-                                                  solver.Infinity(),
+                l[(raw_width, p)] = solver.NumVar(0, solver.Infinity(),
                                                   f"l[{raw_width}, {p}]")
                 y[(raw_width, p)] = solver.BoolVar(f"y[{raw_width}, {p}]")
 
@@ -301,7 +288,7 @@ class Solution:
             result = pd.DataFrame(columns=col)
 
             for (w, j), var in y.items():
-                if var.solution_value() > 0:
+                if var.solution_value() == True:
                     pattern = raw_matrices[w].iloc[j]
                     new_row = {"raw_width": w,
                                "len_used": l[(w, j)].solution_value(),

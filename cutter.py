@@ -2,7 +2,6 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from support import *
 from solution import *
 from pathlib import Path
-from support import display_in_Chinese, SupportBracket
 
 st.set_page_config(page_title="带钢裁剪系统", layout="wide")
 st.title("📏 带钢裁剪系统")
@@ -40,13 +39,18 @@ if uploaded_file:
     gb.configure_grid_options(enableRangeSelection=True)  # 框选多个单元格，支持shift和ctrl
     grid_options = gb.build()
 
+    # grid_response = AgGrid(filtered_df,
+    #                        gridOptions=grid_options,
+    #                        editable=True,
+    #                        height=max(50 * len(filtered_df), 300),
+    #                        update_mode=GridUpdateMode.VALUE_CHANGED #仅在数值变化时重新渲染
+    #                        )
     grid_response = AgGrid(filtered_df,
                            gridOptions=grid_options,
                            editable=True,
-                           height=max(50 * len(filtered_df), 300),
                            update_mode=GridUpdateMode.VALUE_CHANGED #仅在数值变化时重新渲染
                            )
-    if st.button("应用修改并展示"):
+    if st.button("应用修改并求解"):
         # 获取编辑后的 DataFrame
         updated_df = display_in_English(grid_response['data'])  # 将中文列名转换回英文列名
 
@@ -56,18 +60,34 @@ if uploaded_file:
         # 更新目标规格字段
         brackets.update_target_dimensions()  # 确保所有 SupportBracket 对象的目标规格都得到更新
 
-        st.write(str(brackets.list[0].specification_t))
-        st.write(str(brackets.list[1].specification_t))
-        print(str(brackets.list[0].specification_t))
-        print(str(brackets.list[1].specification_t))
-
-
         #再利用更新的brackets更新updated_df
         updated_df = brackets.to_dataframe()
 
         # 确保更新后的 DataFrame 被重新显示
-        st.write(r"更新后的 DataFrame：")
-        st.dataframe(updated_df)  # 在页面上显示更新后的 DataFrame
-        products = st.dataframe(brackets.prepare4solution())
+        # st.write(r"更新后的 DataFrame：")
+        # st.dataframe(updated_df)  # 在页面上显示更新后的 DataFrame
 
-        # 求解
+        # 按目标厚度和材质分组
+        grouped = updated_df.groupby(["grade", "thickness_t"])
+        index = 1
+        for (grade, thick), group in grouped:
+            group["total_length"] = group["count"] * group["length"]
+            products = group[["unfolded_width", "total_length"]].rename(columns={"unfolded_width":"width"})
+            products = products.groupby("width").sum().reset_index()
+            # st.dataframe(products)
+            # st.write(f"for grade is {grade}, thickness is {thick}:")
+
+            # 对每组求解
+            max_patterns = 10
+            sol = Solution(products=products)
+            result = sol.solve(max_patterns=max_patterns)
+
+            if result is not None:
+                with st.expander(f"第{index}组: 材质：{grade}、厚度：{thick}"):
+                    # st.markdown(f"*包含支架*")
+                    result = result[result["len_used"]>0]
+                    st.dataframe(display_in_Chinese(result))
+
+
+
+

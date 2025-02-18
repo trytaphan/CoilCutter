@@ -25,14 +25,15 @@ class SupportBracket:
         "count": "总数量",
         "grade": "材质",
         "name": "名称",
-        "unfolded_width": "展开宽度"
+        "unfolded_width": "展开宽度",
+        "raw_width": "原料宽度",
+        "len_used": "使用长度(mm)",
+        "trim_width": "边丝宽度"
     }
     Chinese_English_mapping = \
         {chinese: english for english, chinese in English_Chinese_mapping.items()}
 
     # 检查一下是不是都有翻译
-    if not len(property_list) == len(Chinese_English_mapping):
-        raise ValueError("SupportBrackets: 有属性未翻译或者有属性没加入property_list！")
     for prop in property_list:
         if not prop in English_Chinese_mapping:
             raise ValueError("SupportBrackets: 有属性未翻译！")
@@ -184,12 +185,6 @@ class Brackets:
         df = pd.read_excel(file_path, engine="openpyxl")
         df = display_in_English(df)
         return Brackets.from_dataframe(df, re_parse)
-
-    def prepare4solution(self):
-        df = self.to_dataframe()[["unfolded_width"]].copy()
-        df.rename(columns={"unfolded_width": "width"}, inplace=True)
-        return df
-
 
 
 def display_in_Chinese(df):
