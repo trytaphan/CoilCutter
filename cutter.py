@@ -88,6 +88,8 @@ if uploaded_file:
                     result = result[result["len_used"]>0]
                     st.dataframe(display_in_Chinese(result))
 
+                index += 1
+
 
 
 
