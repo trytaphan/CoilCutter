@@ -26,9 +26,9 @@ class SupportBracket:
         "grade": "材质",
         "name": "名称",
         "unfolded_width": "展开宽度",
-        "raw_width": "原料宽度",
+        "raw_width": "原料宽度(mm)",
         "len_used": "使用长度(mm)",
-        "trim_width": "边丝宽度"
+        "trim_width": "边丝宽度(mm)"
     }
     Chinese_English_mapping = \
         {chinese: english for english, chinese in English_Chinese_mapping.items()}
