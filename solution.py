@@ -53,44 +53,25 @@ class CuttingPatterns:
         return self
 
     @staticmethod
-    def _generate_combination(tolerance, raw_width, products, current_comb, idx):
-        # 剩余宽度小于0，不符合条件，直接返回
-        if raw_width < 0:
+    def _generate_combination(tolerance, width, products, current_comb, idx):
+        # 若剩余宽度在容忍区间内且非负，生成当前组合
+        if 0 <= width <= tolerance:
+            yield current_comb.copy()
             return
 
-        # 剩余宽度不超过限度，yield结果
-        if raw_width <= tolerance:
-            yield current_comb
+        # 终止条件：宽度不足或处理完所有产品
+        if width < 0 or idx == len(products):
+            return
 
-        # 遍历products里的每种宽度
-        for i, width in enumerate(products[idx:]):
-            max_count = raw_width // width
-            # 遍历每一个可能的出现次数
-            for count in range(max_count + 1):
-                current_comb[i] = count
-                raw_width -= count * width
-                yield from CuttingPatterns._generate_patterns(tolerance, raw_width,
-                                                              products, current_comb, i+1)
-    # @staticmethod
-    # def _generate_combination(tolerance, raw_width, products, current_comb, idx):
-    #     # 剩余宽度小于0，不符合条件，直接返回
-    #     if raw_width < 0:
-    #         return
-    #
-    #     # 剩余宽度不超过限度，yield结果
-    #     if raw_width <= tolerance:
-    #         yield current_comb
-    #
-    #     # 遍历products里的每种宽度
-    #     for i, width in enumerate(products[idx:]):
-    #         max_count = raw_width // width
-    #         # 遍历每一个可能的出现次数
-    #         for count in range(max_count + 1):
-    #             current_comb[i] += count
-    #             raw_width -= count * width
-    #             yield from CuttingPatterns._generate_patterns(tolerance, raw_width,
-    #                                                           products, current_comb, i+1)
-    #             current_comb[i] -= count
+        # 计算当前产品的最大可能数量并遍历
+        max_count = width // products[idx]
+        original_value = current_comb[idx]  # 保存当前idx的值
+        for i in range(max_count + 1):
+            current_comb[idx] = i
+            new_width = width - i * products[idx]
+            yield from CuttingPatterns._generate_combination(tolerance, new_width, products, current_comb, idx + 1)
+        # 每个层级yield之后负责把当前层级的current_comb恢复原值
+        current_comb[idx] = original_value
 
 
     def _generate_patterns(self, tolerance: int, raw_materials=None, products=None):

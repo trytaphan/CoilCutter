@@ -106,9 +106,16 @@ class SupportBracket:
 
     @property
     def unfolded_width(self):
-        return self.height_t + self.dimension_B_t * 2 +self.dimension_C_t * 2 - self.thickness_t * 9
+        if hasattr(self, "_unfolded_width") and self._unfolded_width is not None:
+            return self._unfolded_width
+        else:
+            return self.calculate_unfolded_width()
+    @unfolded_width.setter
+    def unfolded_width(self, value):
+        self._unfolded_width = value
 
-
+    def calculate_unfolded_width(self):
+        return self.height_t + self.dimension_B_t * 2 + self.dimension_C_t * 2 - self.thickness_t * 9
 
     @staticmethod
     def check_specification(specification):
