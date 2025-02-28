@@ -1,25 +1,25 @@
 import pandas as pd
 import streamlit as st
-import openpyxl
+# import openpyxl
 
 
 class SupportBracket:
     property_list = ["shape", "height", "dimension_B", "dimension_C", "thickness",
                      "length", "specification", "height_t", "dimension_B_t",
                      "dimension_C_t", "thickness_t", "specification_t", "unfolded_width",
-                     "count", "name", "grade"]
+                     "count", "name", "grade", "diameter","diameter_t"]
 
     English_Chinese_mapping = {
         "shape": "形状",
         "height": "高度",
-        "dimension_B": "宽度B",
-        "dimension_C": "宽度C",
+        "dimension_B": "宽度",
+        "dimension_C": "卷边宽度",
         "thickness": "厚度",
         "length": "长度",
         "specification": "规格",
         "height_t": "目标高度",
-        "dimension_B_t": "目标宽度B",
-        "dimension_C_t": "目标宽度C",
+        "dimension_B_t": "目标宽度",
+        "dimension_C_t": "目标卷边宽度",
         "thickness_t": "目标厚度",
         "specification_t": "目标规格",
         "count": "总数量",
@@ -28,7 +28,9 @@ class SupportBracket:
         "unfolded_width": "展开宽度",
         "raw_width": "原料宽度(mm)",
         "len_used": "使用长度(mm)",
-        "trim_width": "边丝宽度(mm)"
+        "trim_width": "边丝宽度(mm)",
+        "diameter": "直径",
+        "diameter_t": "目标直径"
     }
     Chinese_English_mapping = \
         {chinese: english for english, chinese in English_Chinese_mapping.items()}
@@ -51,6 +53,7 @@ class SupportBracket:
             self.dimension_C = 0
             self.thickness = 0
             self.length = 0
+            self.diameter = 0
             self.specification = ""
         else:
             # 解析规格
@@ -61,21 +64,74 @@ class SupportBracket:
         # 其他属性
         self.count = count
 
+    @staticmethod
+    def validate_specification(specification):
+        spec = specification.replace(" ", "")
+        try:
+            if spec.count("*") != 4 and spec.count("*") !=3:
+                raise ValueError(r"*不是4个或者3个。")
+            if not spec.startswith(("C")):
+                raise ValueError("不是以C开头。")
+        except Exception as e:
+            print(f"请检查规格{spec}: {e}")
+            st.warning(f"请检查规格{spec}: {e}")
+
+
+    @staticmethod
+    def _parse_spec(spec):
+        # 预处理
+        spec = spec.replace(" ", "")    # 去除空字符
+        spec = spec[0].upper() + spec[1:]   # 确保shape为大写
+
+        # 检查规格字符串规范性
+        SupportBracket.validate_specification(spec)
+
+        # 解析
+        shape = spec[0]
+
+        # C型或者U型
+        if shape == "C" or shape == "U":
+            spec_list = spec[1:].split(sep="*")
+            if len(spec_list) == 4:  # 若无卷边，插入卷边宽度0
+                spec_list.insert(2, 0)
+            height, dimension_B, dimension_C, thickness, length \
+                = [float(num) for num in spec_list]  # 按顺序赋值
+            diameter = 0
+
+        # 圆管
+        if shape == "Φ":
+            spec_list = spec[1:].split(sep="*")
+            diameter, thickness, length = [float(num) for num in spec_list]
+            height, dimension_B, dimension_C= [0] * 3
+
+        return (height, dimension_B, dimension_C, thickness, length, diameter, spec)
+
+
     def parse_specification(self, specification=None):
         """解析规格"""
+        # 允许按指定的规格解析，默认使用实例属性
         if specification is not None:
-            specification = specification.replace(" ", "")
+            specification = specification
         else:
             specification = self.specification
-        SupportBracket.check_specification(specification)
-        self.shape = specification[0]
-        spec_dict = specification[1:].split(sep="*")
-        self.height = float(spec_dict[0])
-        self.dimension_B = float(spec_dict[1])
-        self.dimension_C = float(spec_dict[2])
-        self.thickness = float(spec_dict[3])
-        self.length = float(spec_dict[4])
-        self.specification = specification
+
+        #解析
+        (self.height, self.dimension_B, self.dimension_C, self.thickness,
+         self.length, self.diameter, self.specification) = SupportBracket._parse_spec(specification)
+
+
+    def update_target_dimensions(self, spec_t=None):
+        """利用已有的目标规格计算其他属性"""
+        if spec_t is not None:
+            spec_t = spec_t.replace(" ", "")
+        else:
+            spec_t = self.specification_t.replace(" ", "")
+
+        # 解析
+        (self.height_t, self.dimension_B_t, self.dimension_C_t, self.thickness_t,
+         self.length, self.diameter_t, self.specification_t) = SupportBracket._parse_spec(spec_t)
+
+
 
     def init_target_dimensions(self):
         """目标尺寸：实际生产时要达到的尺寸"""
@@ -86,48 +142,21 @@ class SupportBracket:
         self.specification_t = (f"{self.shape}{self.height_t}*{self.dimension_B_t}*{self.dimension_C_t}"
                                 f"*{self.thickness_t}*{self.length}")
 
-    def update_target_dimensions(self, spec_t=None):
-        """利用已有的目标规格计算其他属性"""
-        if spec_t is not None:
-            spec_t = spec_t.replace(" ", "")
-        else:
-            spec_t = self.specification_t
-        SupportBracket.check_specification(spec_t)
-        spec_dict = spec_t[1:].split(sep="*")
-        self.height_t = float(spec_dict[0])
-        self.dimension_B_t = float(spec_dict[1])
-        self.dimension_C_t = float(spec_dict[2])
-        self.thickness_t = float(spec_dict[3])
-        self.length = float(spec_dict[4])
-        self.specification_t = spec_t
-
     def to_dict(self):
         return {str(prop): getattr(self, prop, None) for prop in self.property_list}
-
     @property
     def unfolded_width(self):
         if hasattr(self, "_unfolded_width") and self._unfolded_width is not None:
             return self._unfolded_width
         else:
             return self.calculate_unfolded_width()
+
     @unfolded_width.setter
     def unfolded_width(self, value):
         self._unfolded_width = value
 
     def calculate_unfolded_width(self):
-        return self.height_t + self.dimension_B_t * 2 + self.dimension_C_t * 2 - self.thickness_t * 9
-
-    @staticmethod
-    def check_specification(specification):
-        spec = specification.replace(" ", "")
-        try:
-            if spec.count("*") != 4:
-                raise ValueError(r"*不是4个。")
-            if not spec.startswith(("C")):
-                raise ValueError("不是以C开头。")
-        except Exception as e:
-            print(f"请检查规格{spec}: {e}")
-            st.warning(f"请检查规格{spec}: {e}")
+        return self.height_t + self.dimension_B_t * 2 + self.dimension_C_t * 2 - self.thickness_t * 8
 
 
     @staticmethod

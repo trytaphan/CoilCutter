@@ -80,8 +80,15 @@ if not uploaded_file:
                     3. 上传填写好的数据文件
                     4. 在表格中调整关键参数
                     5. 点击求解按钮获取方案
+                    
                     #### 数据要求
                     - 尺寸单位：统一使用毫米(mm)
+                    - 支持C型、U型钢（如C100\*35\*10\*2.5\*9775），数值分别会被解析为：
+                        - 高度、宽度、卷边宽度、厚度和长度
+                    - 对于C型和U型钢，如果只有4个维度，会认为卷边宽度为0
+                    - 支持圆管（如φ6*2.5*5200），数值分别会被解析为：
+                        - 直径、厚度、长度
+                        
                     #### 系统原理说明
                     - 自动解析上传的模版中的规格
                     - 按材质和厚度分组
@@ -90,7 +97,7 @@ if not uploaded_file:
 
     with col2:
         st.image("assets/coilgirl.png", use_container_width=True,
-                 caption="领导发现前删除")
+                 caption="不知道放个啥在这")
 
 
 
@@ -105,7 +112,7 @@ if uploaded_file:
 
     # 选定需要展示的列, 并翻译
     columns_to_display = ["name", "grade", "specification", "specification_t", "count", "height_t", "dimension_B_t",
-                     "dimension_C_t", "thickness_t", "unfolded_width"]
+                     "dimension_C_t", "thickness_t", "diameter", "unfolded_width"]
     filtered_df = display_in_Chinese(df[columns_to_display])
 
     # 配置GridOptions
