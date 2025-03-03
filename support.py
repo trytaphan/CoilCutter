@@ -1,5 +1,7 @@
 import pandas as pd
 import streamlit as st
+
+
 # import openpyxl
 
 
@@ -65,23 +67,55 @@ class SupportBracket:
         self.count = count
 
     @staticmethod
-    def validate_specification(specification):
-        spec = specification.replace(" ", "")
+    def validate_specification(spec:str):
+        # 预处理，变为大写，去除所有空格，替换φ的错误写法Ø
+        spec = spec.upper().replace(" ", "").replace("Ø", "Φ")
+
         try:
-            if spec.count("*") != 4 and spec.count("*") !=3:
-                raise ValueError(r"*不是4个或者3个。")
-            if not spec.startswith(("C")):
-                raise ValueError("不是以C开头。")
-        except Exception as e:
+            # 验证首字母
+            shape = spec[0]
+            if shape not in ["C", "U", "Φ"]:
+                raise ValueError("规格应该以C、U或者Φ开头。")
+
+            # 看看是不是只有首字母
+            if len(spec) < 2:
+                raise ValueError("规格必须带参数。")
+
+            # 检查参数数量
+            parts = spec[1:].split(sep="*")
+            if shape == "Φ":
+                if len(parts) != 3:
+                    raise ValueError("圆管应该有三个参数。")
+            elif len(parts) not in [4, 5]:
+                raise ValueError(f"{shape}型钢应该有4-5个参数。")
+
+            # 检查是否有空参数
+            for part in parts:
+                if part == "":
+                    raise ValueError(f"有空参数（*前后没有数字，或者连用两个*）。")
+
+        except ValueError as e:
             print(f"请检查规格{spec}: {e}")
             st.warning(f"请检查规格{spec}: {e}")
+            return False
+
+        # 验证参数是否为数值
+        try:
+            [float(part) for part in parts]
+        except ValueError:
+            print(f"请检查规格{spec}: 包含非数字的参数。")
+            st.warning(f"请检查规格{spec}: 包含非数字的参数。")
+            return False
+
+
+
+        return True
 
 
     @staticmethod
-    def _parse_spec(spec):
-        # 预处理
-        spec = spec.replace(" ", "")    # 去除空字符
-        spec = spec[0].upper() + spec[1:]   # 确保shape为大写
+    def _parse_spec(spec:str):
+        # 预处理，变为大写，去除所有空格，替换φ的错误写法Ø
+        spec = spec.upper().replace(" ", "").replace("Ø", "Φ")
 
         # 检查规格字符串规范性
         SupportBracket.validate_specification(spec)
