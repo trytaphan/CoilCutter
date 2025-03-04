@@ -111,8 +111,9 @@ if uploaded_file:
     df = process_uploaded_file(uploaded_file)
 
     # 选定需要展示的列, 并翻译
-    columns_to_display = ["name", "grade", "specification", "specification_t", "count", "height_t", "dimension_B_t",
-                     "dimension_C_t", "thickness_t", "diameter", "unfolded_width"]
+    columns_to_display = ["name", "grade", "specification", "specification_t", "count", "unfolded_width"]
+    # columns_to_display = ["name", "grade", "specification", "specification_t", "count", "height_t", "dimension_B_t",
+    #                  "dimension_C_t", "thickness_t", "diameter", "unfolded_width"]
     filtered_df = display_in_Chinese(df[columns_to_display])
 
     # 配置GridOptions
