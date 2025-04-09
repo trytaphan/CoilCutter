@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import math
 
+
 # import openpyxl
 
 
@@ -9,7 +10,7 @@ class SupportBracket:
     property_list = ["shape", "height", "dimension_B", "dimension_C", "thickness",
                      "length", "specification", "height_t", "dimension_B_t",
                      "dimension_C_t", "thickness_t", "specification_t", "unfolded_width",
-                     "count", "name", "grade", "diameter", "diameter_t"]
+                     "count", "name", "grade", "diameter", "diameter_t", "material_type", "density"]
 
     English_Chinese_mapping = {
         "shape": "形状",
@@ -32,10 +33,16 @@ class SupportBracket:
         "len_used": "使用长度(mm)",
         "trim_width": "边丝宽度(mm)",
         "diameter": "直径",
-        "diameter_t": "目标直径"
+        "diameter_t": "目标直径",
+        "material_type": "材料类型",
+        "density": "密度(g/cm3)"
     }
     Chinese_English_mapping = \
         {chinese: english for english, chinese in English_Chinese_mapping.items()}
+    # 不同材料的密度，单位g/cm3
+    DENSITY = {"锌铝镁": 7.1,
+               "低碳钢": 7.85
+               }
 
     # 检查一下是不是都有翻译
     for prop in property_list:
@@ -64,6 +71,7 @@ class SupportBracket:
 
         # 其他属性
         self.count = count
+
 
     @staticmethod
     def validate_specification(spec: str):
@@ -201,10 +209,6 @@ class SupportBracket:
         else:
             pass
             # raise ValueError(f"不支持的类型：{self.shape}")
-
-
-
-
 
     @staticmethod
     def from_dataframe(df, idx, re_parse=False):

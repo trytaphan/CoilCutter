@@ -1,3 +1,5 @@
+import string
+
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from support import *
 from solution import *
@@ -44,7 +46,8 @@ def visualize_key_elements(_combined_df):
                 height=400
             )
 
-
+def get_density(material_type):
+    return SupportBracket.DENSITY[material_type]
 
 
 st.set_page_config(page_title="带钢裁剪系统", layout="wide")
@@ -86,7 +89,7 @@ if not uploaded_file:
                     - 支持C型、U型钢（如C100\*35\*10\*2.5\*9775），数值分别会被解析为：
                         - 高度、宽度、卷边宽度、厚度和长度
                     - 对于C型和U型钢，如果只有4个维度，会认为卷边宽度为0
-                    - 支持圆管（如φ6*2.5*5200），数值分别会被解析为：
+                    - 支持圆管（如Φ6\*2.5\*5200），数值分别会被解析为：
                         - 直径、厚度、长度
                         
                     #### 系统原理说明
@@ -109,9 +112,13 @@ if not uploaded_file:
 if uploaded_file:
     # 解析
     df = process_uploaded_file(uploaded_file)
+    st.dataframe(df)
+
+    df["density"] = df["material_type"].apply(get_density)
+    st.dataframe(df)
 
     # 选定需要展示的列, 并翻译
-    columns_to_display = ["name", "grade", "specification", "specification_t", "count", "unfolded_width"]
+    columns_to_display = ["name", "material_type", "density", "grade", "specification", "specification_t", "count", "unfolded_width"]
     # columns_to_display = ["name", "grade", "specification", "specification_t", "count", "height_t", "dimension_B_t",
     #                  "dimension_C_t", "thickness_t", "diameter", "unfolded_width"]
     filtered_df = display_in_Chinese(df[columns_to_display])
@@ -147,13 +154,12 @@ if uploaded_file:
         group_descriptions = []
 
         # 按目标厚度和材质分组
-        grouped = updated_df.groupby(["grade", "thickness_t"])
+        grouped = updated_df.groupby(["grade", "thickness_t", "material_type"])
         group_index = 1
-        for (grade, thick), group in grouped:
+        for (grade, thick, material), group in grouped:
             group["total_length"] = group["count"] * group["length"]
             products = group[["unfolded_width", "total_length"]].rename(columns={"unfolded_width":"width"})
             products = products.groupby("width").sum().reset_index()
-
             # 对每组求解
             max_patterns = 5
             sol = Solution(products=products)
@@ -165,14 +171,14 @@ if uploaded_file:
                 result["使用长度(m)"] = result["使用长度(mm)"] / 1000
                 result["重量(吨)"] =(
                         result["使用长度(m)"] * result["原料宽度(mm)"] * thick
-                        / 1e6 * 7.85 )
+                        / 1e6 * get_density(material) )
                 result["原料利用率"] = (1 - result["边丝宽度(mm)"] / result["原料宽度(mm)"])
                 col_in_order = (["原料宽度(mm)", "使用长度(m)","重量(吨)","原料利用率"] +
                                 [column for column in result.columns if isinstance(column, float)])
                 result = result[col_in_order]
 
                 # 在下拉框里展示每一个分组的信息
-                with st.expander(f"# 第{group_index}组: 材质：{grade}、厚度：{thick}",
+                with st.expander(f"# 第{group_index}组: 材料： {material}、材质：{grade}、厚度：{thick}",
                                  expanded=True):
                     # 用无序列表展示该分组包含的成品
                     st.markdown(f"**包含成品:**")
@@ -184,7 +190,7 @@ if uploaded_file:
                     st.dataframe(result)
 
                 # 记录分组信息
-                description_text = f'第{group_index}组 ({grade}, {thick}mm)'
+                description_text = f'第{group_index}组 ({material}, {grade}, {thick}mm)'
                 result["group_description"] = description_text
                 group_descriptions.append({"group_description": description_text,
                                            "products":group})
