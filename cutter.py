@@ -49,9 +49,9 @@ def visualize_key_elements(_combined_df):
 def get_density(material_type):
     return SupportBracket.DENSITY[material_type]
 
-
+# 主程序
 st.set_page_config(page_title="带钢裁剪系统", layout="wide")
-st.title("📏 带钢裁剪系统")
+st.title("🏭 带钢裁剪优化系统")
 st.sidebar.header("操作菜单")
 
 # 下载标准模板
@@ -68,9 +68,34 @@ with open(template_path, "rb") as template:
     )
 
 # 再次上传已经填好的数据
-uploaded_file = st.sidebar.file_uploader(label="📂 上传数据",
+uploaded_file = st.sidebar.file_uploader(label="📂 上传成品数据",
                                  type=["xlsx"],
                                  help="请按上面的模板上传数据")
+
+# 求解参数设置
+with st.sidebar.expander(label="⚙️ 求解参数设置", expanded=True):
+    config = {"max_patterns":st.slider("最大裁剪方案数", 1, 10, 5),
+              "trim_tolerance":st.slider("边丝容忍度(mm)", 0, 150, 50)}
+
+# 原料参数
+discrete_widths = None   # widths在选择分立宽度时被设定
+with st.sidebar.expander(label="⚙️ 原料设定", expanded=True):
+    raw_type = st.radio("原料宽度范围",
+        ["连续范围", "分立宽度"],
+        help="选择使用连续范围的原料还是指定具体宽度")
+    if raw_type=="连续范围":
+        raw_range = st.slider("原料宽度范围(mm)", 1000, 1300, (1000, 1300))
+        st.write(f"原料宽度范围为：{raw_range}")
+    elif raw_type=="分立宽度":
+        raw_discrete = st.text_input("输入原料宽度，以逗号分隔")
+        try:
+            discrete_widths = raw_discrete.replace("，", ",") #
+        except:
+            pass
+        if discrete_widths:
+            st.write(f"原料宽度范围为：{raw_range}")
+
+
 
 if not uploaded_file:
     st.subheader("📌 使用指南")
@@ -101,12 +126,6 @@ if not uploaded_file:
     with col2:
         st.image("assets/coilgirl.png", use_container_width=True,
                  caption="不知道放个啥在这")
-
-
-
-
-
-
 
 
 if uploaded_file:
