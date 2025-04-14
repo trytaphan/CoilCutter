@@ -52,27 +52,6 @@ class CuttingPatterns:
             self._add_patterns(raw_width, df)
         return self
 
-    @staticmethod
-    def _generate_combination(tolerance, width, products, current_comb, idx):
-        # 若剩余宽度在容忍区间内且非负，生成当前组合，此方法暂时不用，留作参考
-        if 0 <= width <= tolerance:
-            yield current_comb.copy()
-            return
-
-        # 终止条件：宽度不足或处理完所有产品
-        if width < 0 or idx == len(products):
-            return
-
-        # 计算当前产品的最大可能数量并遍历
-        max_count = width // products[idx]
-        original_value = current_comb[idx]  # 保存当前idx的值
-        for i in range(max_count + 1):
-            current_comb[idx] = i
-            new_width = width - i * products[idx]
-            yield from CuttingPatterns._generate_combination(tolerance, new_width, products, current_comb, idx + 1)
-        # 每个层级yield之后负责把当前层级的current_comb恢复原值
-        current_comb[idx] = original_value
-
     def _generate_patterns(self, tolerance: int, raw_materials=None, products=None):
         """
 
@@ -138,8 +117,8 @@ class CuttingPatterns:
 
         # 生成全部pattern
         self.raw_matrix = self._generate_patterns(tolerance=self.products.width.min(),
-                                             raw_materials=self.raw_materials,
-                                             products=self.products)
+                                                  raw_materials=self.raw_materials,
+                                                  products=self.products)
 
         # 给每个pattern标价格
         self.raw_matrix = self._price_patterns(self.raw_matrix, cost_df)
@@ -150,34 +129,17 @@ class CuttingPatterns:
 
 
 class Solution:
-    def __init__(self, raw_materials=None, products=None):
+    def __init__(self, raw_materials=None, products=None, cost_df=None):
         """
         :param raw_materials: DataFrame,包含width
         :param products: DataFrame,包含width和total_length两列
         """
         self.result = None
         self.products = products
-        if raw_materials is not None:
-            self.raw_materials = raw_materials
-        else:
-            self.get_raw_materials()
-
-        self.cost_df = Solution.get_cost_df()
-
-    def get_raw_materials(self):
-        """提供默认的原材料设置"""
-        raw_materials = pd.DataFrame(data=range(1000, 1301), columns=['width'])
-        self.raw_materials = raw_materials.sort_values(by="width", ignore_index=True)
-        return self.raw_materials
-
-    @staticmethod
-    def get_cost_df():
-        return pd.DataFrame({"start_width": [1000, 1200, 1300],
-                        "cost": [4240, 4190, 4150]})
-
+        self.raw_materials = raw_materials
+        self.cost_df = cost_df
 
     def solve(self, max_patterns):
-
 
         # 生成所有的裁剪方案
         generator = CuttingPatterns(raw_materials=self.raw_materials, products=self.products)
@@ -193,13 +155,13 @@ class Solution:
         for idx, row in patterns_df.iterrows():
             variables[idx] = {
                 "l": solver.NumVar(0, solver.Infinity(), f"l_{idx}"),
-                "y": solver.BoolVar( f"y_{idx}")
-                              }
+                "y": solver.BoolVar(f"y_{idx}")
+            }
 
         # 定义目标函数
         objective = solver.Objective()  # 目标为使用原材料的价值最小
         for idx, row in patterns_df.iterrows():
-            cost = float(row["cost"]*(row["raw_width"] - row["trim_width"]/2))
+            cost = float(row["cost"] * (row["raw_width"] - row["trim_width"] / 2))
             objective.SetCoefficient(variables[idx]["l"], cost)
         objective.SetMinimization()
 
@@ -230,7 +192,7 @@ class Solution:
 
             # 初始化结果DataFrame
             result = patterns_df.copy()
-            result["len_used"] =\
+            result["len_used"] = \
                 [variables[idx]["l"].solution_value() for idx in result.index]
             result = result[result["len_used"] >= 1e-6].copy()
             self.result = result
