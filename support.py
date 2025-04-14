@@ -72,7 +72,6 @@ class SupportBracket:
         # 其他属性
         self.count = count
 
-
     @staticmethod
     def validate_specification(spec: str):
         # 预处理，变为大写，去除所有空格，替换φ的错误写法Ø
@@ -95,12 +94,12 @@ class SupportBracket:
                     raise ValueError(f"有空参数（*前后没有数字，或者连用两个*）。")
 
             # 检查参数数量
-            if shape == "Φ":
-                if len(parts) != 3:
-                    raise ValueError("圆管应该有三个参数。")
-            elif len(parts) not in [4, 5]:
-                raise ValueError(f"{shape}型钢应该有4-5个参数。")
-
+            if shape == "Φ" and len(parts) != 3:
+                raise ValueError("圆管应该有三个参数。")
+            elif shape == "U" and len(parts) != 4:
+                raise ValueError(f"U型钢应该有4个参数。")
+            elif shape == "C" and len(parts) != 5:
+                raise ValueError(f"C型钢应该有5个参数。")
 
 
         except ValueError as e:
@@ -129,9 +128,12 @@ class SupportBracket:
         parts = [float(p) for p in spec[1:].split("*")]
 
         # 分类型解析
-        if shape in ["U", "C"]:
-            if len(parts) == 4:  # 若无卷边，插入卷边宽度0
-                parts.insert(2, 0)
+        if shape == "C":
+            # C型钢直接解析5个参数
+            height, dimension_B, dimension_C, thickness, length = parts
+            diameter = 0.0
+        elif shape == "U":
+            parts.insert(2, 0)
             height, dimension_B, dimension_C, thickness, length = parts  # 按顺序赋值
             diameter = 0.0
         elif shape == "Φ":
@@ -165,13 +167,25 @@ class SupportBracket:
 
     def init_target_dimensions(self):
         """目标尺寸：实际生产时要达到的尺寸"""
-        self.height_t = self.height - 1
-        self.dimension_B_t = self.dimension_B - 1
-        self.dimension_C_t = self.dimension_C - 0.5
-        self.thickness_t = self.thickness
-        self.specification_t = (f"{self.shape}{self.height_t}*{self.dimension_B_t}*{self.dimension_C_t}"
-                                f"*{self.thickness_t}*{self.length}")
-
+        if self.shape == "C":
+            self.height_t = self.height - 1
+            self.dimension_B_t = self.dimension_B - 1
+            self.dimension_C_t = self.dimension_C - 0.5
+            self.thickness_t = self.thickness
+            self.specification_t = (f"{self.shape}{self.height_t}*{self.dimension_B_t}*{self.dimension_C_t}"
+                                    f"*{self.thickness_t}*{self.length}")
+        elif self.shape == "U":
+            self.height_t = self.height - 1
+            self.dimension_B_t = self.dimension_B - 1
+            self.dimension_C_t = 0
+            self.thickness_t = self.thickness
+            self.specification_t = (f"{self.shape}{self.height_t}*{self.dimension_B_t}"
+                                    f"*{self.thickness_t}*{self.length}")
+        elif self.shape == "Φ":
+            # 圆管处理逻辑
+            self.diameter_t = self.diameter
+            self.thickness_t = self.thickness
+            self.specification_t = f"{self.shape}{self.diameter_t}*{self.thickness_t}*{self.length}"
     def to_dict(self):
         return {str(prop): getattr(self, prop, None) for prop in self.property_list}
 
