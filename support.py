@@ -165,6 +165,7 @@ class SupportBracket:
         (self.shape, self.height_t, self.dimension_B_t, self.dimension_C_t, self.thickness_t,
          self.length, self.diameter_t, self.specification_t) = SupportBracket._parse_spec(spec_t)
 
+
     def init_target_dimensions(self):
         """目标尺寸：实际生产时要达到的尺寸"""
         if self.shape == "C":
